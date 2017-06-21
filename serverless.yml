@@ -1,0 +1,88 @@
+service: serverless-test
+
+# You can pin your service to only deploy with a specific Serverless version
+# Check out our docs for more details
+# frameworkVersion: "=X.X.X"
+
+provider:
+  name: aws
+  runtime: nodejs6.10
+  memorySize: 128
+  timeout: 60
+  versionFunctions: true
+  role: arn:aws:iam::${env:AWS_ACCOUNT_ID}:role/redeye/redeye-lambda-role
+
+stage: dev
+region: ${env:AWS_REGION}
+
+# you can define service wide environment variables here
+#  environment:
+#    variable1: value1
+
+# you can add packaging information here
+package:
+  exclude:
+    - .idea/**
+    - .git/**
+    - .gitignore
+    - tsconfig.json
+
+functions:
+  mapDataFromStream:
+    handler: index
+    events:
+      - stream:
+          arn: arn:aws:kinesis:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:stream/redeye-map
+          batchSize: 100
+          startingPosition: LATEST
+          enabled: false
+
+  receiveDataFromStream:
+    handler: index
+    events:
+      - stream:
+          arn: arn:aws:kinesis:${env:AWS_REGION}:${env:AWS_ACCOUNT_ID}:stream/redeye-receive
+          batchSize: 100
+          startingPosition: LATEST
+          enabled: false
+
+resources:
+  Resources:
+    ReceiveStream:
+      Type: AWS::Kinesis::Stream
+      Properties:
+        Name: redeye-receive
+        ShardCount: 1
+        Tags:
+          - Key: product
+            Value: redeye
+
+    MapStream:
+      Type: AWS::Kinesis::Stream
+      Properties:
+        Name: redeye-map
+        ShardCount: 1
+        Tags:
+          - Key: product
+            Value: redeye
+
+
+    LambdaIAMPolicy:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: lambda.amazonaws.com
+              Action: "sts:AssumeRole"
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/AWSLambdaFullAccess
+          - arn:aws:iam::aws:policy/CloudWatchFullAccess
+          - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+          - arn:aws:iam::aws:policy/AmazonKinesisFullAccess
+          - arn:aws:iam::aws:policy/AmazonVPCFullAccess
+          - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+        Path: /redeye/
+        RoleName: redeye-lambda-role
